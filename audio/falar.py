@@ -9,7 +9,7 @@ def falar(texto):
     gerador = pipeline(
         texto,
         voice="pf_dora",
-        speed=1
+        speed=1.1
     )
 
     for _, _, audio in gerador:

@@ -1,15 +1,18 @@
 import speech_recognition as sr
 
-def escutar():
-    recognizer = sr.Recognizer()
+recognizer = sr.Recognizer()
 
-    recognizer.pause_threshold = 1.0
-    recognizer.non_speaking_duration = 0.5
+recognizer.pause_threshold = 1.0
+recognizer.non_speaking_duration = 0.5
 
-    recognizer.dynamic_energy_threshold = False
-    recognizer.energy_threshold = 400
+recognizer.dynamic_energy_threshold = False
+recognizer.energy_threshold = 400
 
-    with sr.Microphone(sample_rate=16000) as source:
+microfone = sr.Microphone(sample_rate=16000)
+
+
+def calibrar():
+    with microfone as source:
         print("Calibrando microfone por 1 segundo (fique em silêncio)...")
         recognizer.adjust_for_ambient_noise(source, duration=1.0)
 
@@ -18,6 +21,9 @@ def escutar():
 
         print("\nMicrofone pronto! Fale normalmente...\n")
 
+
+def escutar():
+    with microfone as source:
         try:
             audio = recognizer.listen(source, phrase_time_limit=None)
             print("Transcrevendo...")
@@ -44,4 +50,5 @@ def escutar():
 
 
 if __name__ == "__main__":
+    calibrar()
     escutar()

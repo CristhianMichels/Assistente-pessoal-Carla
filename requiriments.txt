@@ -4,3 +4,4 @@ kokoro
 torch
 torchaudio
 sounddevice
+ollama
