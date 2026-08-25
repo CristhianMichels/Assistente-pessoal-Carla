@@ -5,3 +5,5 @@ torch
 torchaudio
 sounddevice
 ollama
+dotenv
+re
