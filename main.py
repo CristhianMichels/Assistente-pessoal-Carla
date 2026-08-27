@@ -9,8 +9,6 @@ from audio.ouvir import (
 from cerebro.decisao import decidir
 from recursos.formatacao import remover_acentos
 
-TIMEOUT_CONVERSA = 20
-
 TIMEOUT_RECONHECIMENTO_INTERRUPCAO = 4
 
 
@@ -36,9 +34,13 @@ def falar_com_interrupcao(fila_frases, cancelar_geracao=None):
 
 
 def _proximo_texto():
+    """Sem timeout de propósito: a conversa não deve voltar sozinha pra
+    palavra de ativação por silêncio, só quando a pessoa disser
+    explicitamente "tchau carla" (despedida) ou "desativar carla"
+    (desligar o sistema)."""
     if not resultado_interrupcao.empty():
         return resultado_interrupcao.get()
-    return escutar(timeout=TIMEOUT_CONVERSA)
+    return escutar()
 
 
 def _texto_da_interrupcao():
@@ -58,8 +60,8 @@ def ciclo_conversa():
             texto = _proximo_texto()
 
         if not texto:
-            print("Carla: (silêncio) voltando a esperar a palavra de ativação.")
-            return True
+            texto = None
+            continue
 
         print(f"Você: {texto}")
 
@@ -69,7 +71,7 @@ def ciclo_conversa():
 
         conversa, resposta, fila_frases, cancelar_geracao = decidir(texto)
         interrompida = False
-
+        
         if resposta:
             try:
                 interrompida = falar_com_interrupcao(fila_frases, cancelar_geracao)
@@ -94,7 +96,15 @@ def main():
             print("\nEncerrando...")
             break
 
-        if texto and "carla" in texto.lower():
+        if not texto:
+            continue
+
+        texto_normalizado = remover_acentos(texto).lower()
+
+        if "desativar carla" in texto_normalizado:
+            print("Carla: Desligando")
+            ligado = False
+        elif "carla" in texto_normalizado:
             print("Estou aqui!")
             falar("Estou aqui!")
             ligado = ciclo_conversa()

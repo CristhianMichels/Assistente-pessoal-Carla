@@ -5,6 +5,7 @@ etc., mantendo o main.py enxuto (só chama decidir())."""
 
 from recursos.formatacao import remover_acentos
 from cerebro.ia import pensar_stream
+from audio.falar import falar
 
 PALAVRAS_DESPEDIDA = [
     "tchau carla", "vai dormir carla", "carla tchau",
@@ -18,11 +19,12 @@ def decidir(texto):
     - fila_frases / cancelar_geracao: o que falar_com_interrupcao precisa
       pra tocar e, se for o caso, cancelar a geração. Vêm None quando não
       há geração de IA rolando."""
-    texto_normalizado = remover_acentos(texto)
+    texto_normalizado = remover_acentos(texto).lower()
 
     if any(x in texto_normalizado for x in PALAVRAS_DESPEDIDA):
+        falar("Até mais!")
         return False, None, None, None
-
+    
     resposta = texto
     fila_frases, cancelar_geracao = pensar_stream(resposta)
     return True, resposta, fila_frases, cancelar_geracao
