@@ -18,18 +18,27 @@ recognizer.phrase_threshold = 0.1
 recognizer.dynamic_energy_threshold = False
 recognizer.energy_threshold = 400
 
-microfone = sr.Microphone(sample_rate=16000)
+SAMPLE_RATE_MONITOR = 16000
+
+microfone = sr.Microphone(sample_rate=SAMPLE_RATE_MONITOR)
 _source = None
 
 LIMIAR_INTERRUPCAO = 0.05
-LIMITE_SILENCIO = 20
+# Tempo de silêncio (em segundos) pra considerar que a pessoa terminou
+# de falar durante uma interrupção. Igualado ao pause_threshold do
+# escutar() normal — antes isso era contado em "blocos" de callback do
+# PortAudio (que são curtos e variam por máquina), e qualquer pausa
+# natural no meio da frase ("faz um... resumo disso") já fechava a
+# gravação cedo demais, cortando a fala em pedaços.
+LIMITE_SILENCIO_SEGUNDOS = 1.0
+LIMITE_SILENCIO_AMOSTRAS = int(LIMITE_SILENCIO_SEGUNDOS * SAMPLE_RATE_MONITOR)
 
 resultado_interrupcao = queue.Queue()
 
 _stream_monitor = None
 _armado = False
 _gravando = False
-_silencio_contador = 0
+_silencio_amostras = 0
 _frames = []
 _stop_event_atual = None
 
@@ -50,7 +59,7 @@ def calibrar():
     print(f"Sensibilidade definida em: {recognizer.energy_threshold}")
 
     _stream_monitor = sd.InputStream(
-        samplerate=16000,
+        samplerate=SAMPLE_RATE_MONITOR,
         channels=1,
         dtype='float32',
         callback=_callback_monitor
@@ -101,7 +110,7 @@ def escutar(timeout=None, phrase_time_limit=None):
 def _callback_monitor(indata, frames_count, time_info, status):
     """Roda na thread de áudio do PortAudio. Precisa ser rápido e sem I/O
     de rede/disco — só mede volume e empilha o buffer."""
-    global _gravando, _silencio_contador
+    global _gravando, _silencio_amostras
 
     if not _armado:
         return
@@ -111,17 +120,17 @@ def _callback_monitor(indata, frames_count, time_info, status):
     if not _gravando:
         if volume > LIMIAR_INTERRUPCAO:
             _gravando = True
-            _silencio_contador = 0
+            _silencio_amostras = 0
             _frames.append(indata.copy())
             if _stop_event_atual:
                 _stop_event_atual.set()
     else:
         _frames.append(indata.copy())
         if volume > LIMIAR_INTERRUPCAO:
-            _silencio_contador = 0
+            _silencio_amostras = 0
         else:
-            _silencio_contador += 1
-            if _silencio_contador > LIMITE_SILENCIO:
+            _silencio_amostras += frames_count
+            if _silencio_amostras > LIMITE_SILENCIO_AMOSTRAS:
                 _finalizar_gravacao()
 
 
@@ -152,7 +161,7 @@ def _loop_reconhecimento_interrupcao():
             audio_int16 = (audio_np * 32767).astype(np.int16)
             audio_bytes = audio_int16.tobytes()
 
-            audio_data = sr.AudioData(audio_bytes, 16000, 2)
+            audio_data = sr.AudioData(audio_bytes, SAMPLE_RATE_MONITOR, 2)
             texto = recognizer.recognize_google(audio_data, language="pt-BR")
             if texto:
                 resultado_interrupcao.put(texto)
@@ -167,18 +176,14 @@ def parar_monitoramento():
 
 
 def monitorar_fala(stop_event):
-    global _armado, _frames, _gravando, _silencio_contador, _stop_event_atual
+    global _armado, _frames, _gravando, _silencio_amostras, _stop_event_atual
 
     _frames = []
     _gravando = False
-    _silencio_contador = 0
+    _silencio_amostras = 0
     _stop_event_atual = stop_event
     _armado = True
 
-    # Bug das últimas mudanças: o InputStream era só criado em
-    # calibrar(), nunca iniciado — então _callback_monitor nunca
-    # rodava e a interrupção nunca era detectada. Agora o stream liga
-    # aqui (só durante a fala da Carla) e desliga ao sair do loop.
     iniciar_stream_monitor()
 
     while _armado:

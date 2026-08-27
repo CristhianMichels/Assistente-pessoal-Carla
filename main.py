@@ -6,21 +6,15 @@ from audio.ouvir import (
     calibrar, escutar, monitorar_fala, parar_monitoramento,
     resultado_interrupcao,
 )
-from cerebro.ia import pensar_stream
 from cerebro.decisao import decidir
+from recursos.formatacao import remover_acentos
 
 TIMEOUT_CONVERSA = 20
-# Depois de uma interrupção, o áudio já foi capturado (falar_com_interrupcao
-# só retorna depois disso), mas o reconhecimento (Google, rede) ainda pode
-# estar rolando em background. Esse é o tempo que esperamos o texto chegar
-# em resultado_interrupcao antes de desistir e abrir um escutar() novo.
+
 TIMEOUT_RECONHECIMENTO_INTERRUPCAO = 4
 
 
-def falar_com_interrupcao(fila_frases, cancelar_geracao):
-    """Fala a resposta em streaming contínuo (ver audio.falar.falar_stream)
-    enquanto monitora interrupção o tempo todo. Devolve True se foi
-    interrompida no meio."""
+def falar_com_interrupcao(fila_frases, cancelar_geracao=None):
     stop_event = threading.Event()
     thread_monitor = threading.Thread(
         target=monitorar_fala, args=(stop_event,), daemon=True
@@ -32,7 +26,8 @@ def falar_com_interrupcao(fila_frases, cancelar_geracao):
         interrompida = falar_stream(fila_frases, stop_event)
     finally:
         if interrompida:
-            cancelar_geracao.set()
+            if cancelar_geracao:
+                cancelar_geracao.set()
         else:
             parar_monitoramento()
         thread_monitor.join()
@@ -47,11 +42,6 @@ def _proximo_texto():
 
 
 def _texto_da_interrupcao():
-    """Chamada logo depois de uma interrupção confirmada: espera o texto
-    do que a pessoa falou por cima da Carla chegar em resultado_interrupcao
-    (reconhecimento roda em background, é assíncrono). Se não chegar a
-    tempo (reconhecimento falhou ou demorou demais), devolve None e quem
-    chamou cai de volta pra um escutar() novo — sem travar pra sempre."""
     try:
         return resultado_interrupcao.get(timeout=TIMEOUT_RECONHECIMENTO_INTERRUPCAO)
     except queue.Empty:
@@ -59,6 +49,8 @@ def _texto_da_interrupcao():
 
 
 def ciclo_conversa():
+    """Devolve True pra continuar ligado (voltar a esperar a palavra de
+    ativação) e False só quando for pra desligar o sistema de vez."""
     texto = None
     conversa = True
     while conversa:
@@ -67,26 +59,35 @@ def ciclo_conversa():
 
         if not texto:
             print("Carla: (silêncio) voltando a esperar a palavra de ativação.")
-            return
+            return True
 
         print(f"Você: {texto}")
 
-        conversa = decidir(texto)
+        if "desativar carla" in remover_acentos(texto).lower():
+            print("Carla: Desligando")
+            return False
+
+        conversa, resposta, fila_frases, cancelar_geracao = decidir(texto)
         interrompida = False
 
-        try:
-            fila_frases, cancelar_geracao = pensar_stream(texto)
-            interrompida = falar_com_interrupcao(fila_frases, cancelar_geracao)
-        except Exception as e:
-            print(f"Erro ao gerar/falar resposta: {e}")
+        if resposta:
+            try:
+                interrompida = falar_com_interrupcao(fila_frases, cancelar_geracao)
+            except Exception as e:
+                print(f"Erro ao gerar/falar resposta: {e}")
 
-        texto = _texto_da_interrupcao() if interrompida else None
+            texto = _texto_da_interrupcao() if interrompida else None
+        else:
+            texto = None
+
+    return True
 
 
 def main():
     calibrar()
+    ligado = True
 
-    while True:
+    while ligado:
         try:
             texto = escutar()
         except KeyboardInterrupt:
@@ -96,7 +97,7 @@ def main():
         if texto and "carla" in texto.lower():
             print("Estou aqui!")
             falar("Estou aqui!")
-            ciclo_conversa()
+            ligado = ciclo_conversa()
 
 
 if __name__ == "__main__":

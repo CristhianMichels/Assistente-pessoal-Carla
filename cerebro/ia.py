@@ -5,7 +5,7 @@ import ollama
 from cerebro.personalidade import PERSONALIDADE_BASE, INSTRUCAO_SUGESTAO
 
 PALAVRAS_TECNICAS = [
-    "explica", "explique", "me explica",
+    "explica", "explique", "me explica", "explicasse"
     "o que e", "qual a diferenca", "qual e a diferenca",
     "me ensina", "como funciona", "como faco",
     "passo a passo", "detalhe", "detalhes",

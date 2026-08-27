@@ -9,7 +9,7 @@ from cerebro.ia import FIM_STREAM
 pipeline = KPipeline(lang_code="p")
 
 VOZ = "af_sky"
-VELOCIDADE = 1.3
+VELOCIDADE = 1.4
 SAMPLE_RATE = 24000
 
 _FIM = object()
